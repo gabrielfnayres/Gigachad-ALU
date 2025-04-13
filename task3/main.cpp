@@ -40,6 +40,8 @@ void save(int &res, string &temp) // 9 bits
 
 int main()
 {
+    mar = 4;
+    sp = 4;
     vector<string> dados;
     read(dados,"dados.txt",32);
     vector<string> inst;
@@ -49,16 +51,16 @@ int main()
     logout << "==============================================";
     logout << "\nVALORES INICIAIS\n\n";
 
-    logout << "mar: " << mar << "\n";
-    logout << "mdr: " << mdr << "\n";
-    logout << "pc:" << pc << "\n";
-    logout << "mbr: " << mbr << "\n";
-    logout << "sp: " << sp << "\n";
-    logout << "lv: " << lv << "\n";
-    logout << "cpp: " << cpp << "\n";
-    logout << "tos: " << tos << "\n";
-    logout << "opc: " << opc << "\n";
-    logout << "h: " << h << "\n\n";
+    logout << "mar: " << decode(mar) << "\n";
+    logout << "mdr: " << decode(mdr) << "\n";
+    logout << "pc:" << decode(pc) << "\n";
+    logout << "mbr: " << decode(mbr) << "\n";
+    logout << "sp: " << decode(sp) << "\n";
+    logout << "lv: " << decode(lv) << "\n";
+    logout << "cpp: " << decode(cpp) << "\n";
+    logout << "tos: " << decode(tos) << "\n";
+    logout << "opc: " << decode(opc) << "\n";
+    logout << "h: " << decode(h) << "\n\n";
 
     logout << "MEMÓRIA:\n";
     for (int i=0;i<dados.size();i++)
@@ -89,14 +91,14 @@ int main()
 
         if (inst[i][17] == '1') // escrita na memória
         {
-            if (mar >= inst.size()) {logout << "out of bounds memory write\n";exit(1);}
+            if (mar >= dados.size()) {logout << "out of bounds memory write\n";exit(1);}
             dados[mar] = decode(mdr);
             logout << "copiando dados de mdr na linha " << mar << "\n";
         } 
 
-        if (inst[i][18] == '0') // leitura na memória
+        if (inst[i][18] == '1') // leitura na memória
         {
-            if (mar >= inst.size()){logout << "out of bonds memory read\n";exit(1);}
+            if (mar >= dados.size()){logout << "out of bounds memory read\n";exit(1);}
 
             logout << "copiando dados da linha " << mar << " para mdr\n";
             mdr = encode(dados[mar]);
@@ -104,16 +106,16 @@ int main()
 
         logout << "\nFIM DA ITERAÇÃO " << i+1 << ":\n";
 
-        logout << "mar: " << mar << "\n";
-        logout << "mdr: " << mdr << "\n";
-        logout << "pc:" << pc << "\n";
-        logout << "mbr: " << mbr << "\n";
-        logout << "sp: " << sp << "\n";
-        logout << "lv: " << lv << "\n";
-        logout << "cpp: " << cpp << "\n";
-        logout << "tos: " << tos << "\n";
-        logout << "opc: " << opc << "\n";
-        logout << "h: " << h << "\n\n";
+        logout << "mar: " << decode(mar) << "\n";
+        logout << "mdr: " << decode(mdr) << "\n";
+        logout << "pc:" << decode(pc) << "\n";
+        logout << "mbr: " << decode(mbr) << "\n";
+        logout << "sp: " << decode(sp) << "\n";
+        logout << "lv: " << decode(lv) << "\n";
+        logout << "cpp: " << decode(cpp) << "\n";
+        logout << "tos: " << decode(tos) << "\n";
+        logout << "opc: " << decode(opc) << "\n";
+        logout << "h: " << decode(h) << "\n\n";
 
         logout << "MEMÓRIA:\n";
         for (int i=0;i<dados.size();i++)
@@ -125,6 +127,5 @@ int main()
 
     }
 
-    write(dados,"dados.txt");
     logout.close();
 }
