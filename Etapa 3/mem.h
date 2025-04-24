@@ -1,4 +1,7 @@
-#include <bits/stdc++.h>
+#include <iostream>
+#include <vector>
+#include <string>
+#include <fstream>
 using namespace std;
 
 void read(vector<string> &palavras,string path,int len);

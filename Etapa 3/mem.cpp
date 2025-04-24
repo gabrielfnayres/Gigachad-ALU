@@ -1,5 +1,4 @@
-#include <bits/stdc++.h>
-
+#include "mem.h"
 using namespace std;
 
 void read(vector<string> &palavras,string path,int len)

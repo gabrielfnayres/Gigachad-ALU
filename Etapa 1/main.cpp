@@ -48,7 +48,6 @@ int main(int argc, char* argv[]) {
         char IR[6];
         copy(linha.begin(), linha.begin() + 6, IR);
 
-        // Chama a função da ULA
         pair<unsigned int, unsigned int> resultado_Ula = ula6bits(IR);
         int A = IR[2] - '0';
         int B = IR[3] - '0';

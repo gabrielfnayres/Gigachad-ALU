@@ -5,135 +5,176 @@
 #include <map>
 #include <bitset>
 #include <iomanip>
+#include <tuple>
+#include <cstdint>
 #include "../task1/alu.h"
 
-// Structure to represent a microinstruction
+// Estrutura para representar uma microinstrução
 struct MicroInstruction {
-    std::string binary; // 23-bit microinstruction
-    std::string description; // Description of what the microinstruction does
+    std::string binary; // Microinstrução de 23 bits para a arquitetura Mic-1
+    std::string description; // Descrição do que a microinstrução faz
 };
 
-// Structure to represent a register set
+// Estrutura para representar um conjunto de registradores
 struct Registers {
-    std::string H;     // 32 bits
-    std::string OPC;   // 32 bits
-    std::string TOS;   // 32 bits
-    std::string CPP;   // 32 bits
-    std::string LV;    // 32 bits
-    std::string SP;    // 32 bits
-    std::string MBR;   // 8 bits
-    std::string PC;    // 32 bits
-    std::string MDR;   // 32 bits
-    std::string MAR;   // 32 bits
+    int32_t H;     // 32 bits
+    int32_t OPC;   // 32 bits
+    int32_t TOS;   // 32 bits
+    int32_t CPP;   // 32 bits
+    int32_t LV;    // 32 bits
+    int32_t SP;    // 32 bits
+    int8_t MBR;    // 8 bits
+    int32_t PC;    // 32 bits
+    int32_t MDR;   // 32 bits
+    int32_t MAR;   // 32 bits
+    bool N;        // Flag de negativo
+    bool Z;        // Flag de zero
 };
 
-// Class to handle the Mic-1 interpreter
+// Classe para manipular o interpretador Mic-1
 class Mic1Interpreter {
 private:
     Registers regs;
-    std::vector<std::string> memory;
-    Alu alu;
+    std::vector<int32_t> memory;
     std::ofstream logFile;
 
-    // Maps to store microinstruction sequences for each instruction
+    // Mapas para armazenar sequências de microinstruções para cada instrução
     std::map<std::string, std::vector<MicroInstruction>> instructionMap;
 
 public:
     Mic1Interpreter() {
-        // Initialize the instruction map with microinstruction sequences
+        // Inicializa os registradores com 0
+        regs.H = 0;
+        regs.OPC = 0;
+        regs.TOS = 0;
+        regs.CPP = 0;
+        regs.LV = 0;
+        regs.SP = 0;
+        regs.MBR = 0;
+        regs.PC = 0;
+        regs.MDR = 0;
+        regs.MAR = 0;
+        regs.N = false;
+        regs.Z = false;
+        
+        // Inicializa o mapa de instruções com sequências de microinstruções
         initializeInstructionMap();
     }
 
     // Initialize the instruction map with microinstruction sequences
     void initializeInstructionMap() {
-        // ILOAD x microinstructions
+        // Instrução ILOAD
         instructionMap["ILOAD"] = {
-            {"00000000000000000000000", "MAR = LV + H; rd"},
-            {"00000000000000000000000", "H = MBR; PC = PC + 1"},
-            {"00000000000000000000000", "MDR = TOS"},
-            {"00000000000000000000000", "MAR = SP = SP + 1; wr"},
-            {"00000000000000000000000", "TOS = MDR"}
+            {"00110100100000000000101", "H = LV"},                 // H = LV
+            {"00111000000000001010000", "MAR = H; rd"},           // MAR = H; rd
+            {"00111001100000000000000", "H = H+1"},               // H = H+1
+            {"00110101000001001100100", "MAR = SP = SP+1; wr"},   // MAR = SP = SP+1; wr
+            {"00110100001000000000000", "TOS = MDR"}              // TOS = MDR
         };
 
-        // DUP microinstructions
+        // Instrução DUP
         instructionMap["DUP"] = {
-            {"00000000000000000000000", "MDR = TOS"},
-            {"00000000000000000000000", "MAR = SP = SP + 1; wr"},
-            {"00000000000000000000000", "PC = PC + 1"}
+            {"00110100000000010100111", "MDR = TOS; wr"},          // MDR = TOS; wr
+            {"00110101000001001100100", "MAR = SP = SP+1; wr"},   // MAR = SP = SP+1; wr
+            {"00111001100000000000000", "PC = PC + 1"}            // PC = PC + 1
         };
 
-        // BIPUSH byte microinstructions
+        // Instrução BIPUSH
         instructionMap["BIPUSH"] = {
-            {"00000000000000000000000", "PC = PC + 1"},
-            {"00000000000000000000000", "MBR = byte; MDR = TOS"}, // First 8 bits will be replaced with the byte value
-            {"00000000000000000000000", "MAR = SP = SP + 1; wr"},
-            {"00000000000000000000000", "TOS = MBR; PC = PC + 1"}
+            {"00111001100000000000000", "PC = PC + 1"},            // PC = PC + 1
+            {"00000000000000000000000", "MBR = byte"},             // Set MBR to the byte value
+            {"00110101000001001000100", "SP = MAR = SP+1"},        // SP = MAR = SP+1
+            {"00001000001000010101000", "MDR = TOS = H; wr"}      // MDR = TOS = H; wr
         };
     }
 
-    // Load initial register values from file
+    // Carrega os valores iniciais dos registradores a partir de um arquivo
     bool loadRegisters(const std::string& filename) {
         std::ifstream file(filename);
         if (!file.is_open()) {
             std::cerr << "Error: Could not open register file: " << filename << std::endl;
             return false;
         }
-
-        std::string line, reg, value;
+        
+        logFile << "*******************************" << std::endl;
+        logFile << "Initial register state" << std::endl;
+        logFile << "*******************************" << std::endl;
+        
+        std::string line;
         while (std::getline(file, line)) {
+            // Ignora linhas vazias
+            if (line.empty()) continue;
+            
+            // Registra o valor do registrador no log
+            logFile << line << std::endl;
+            
+            // Analisa o nome e o valor do registrador
             size_t pos = line.find('=');
             if (pos != std::string::npos) {
-                reg = line.substr(0, pos);
-                // Remove whitespace
-                reg.erase(0, reg.find_first_not_of(" \t"));
-                reg.erase(reg.find_last_not_of(" \t") + 1);
+                std::string regName = line.substr(0, pos);
+                std::string regValue = line.substr(pos + 1);
                 
-                value = line.substr(pos + 1);
-                // Remove whitespace
-                value.erase(0, value.find_first_not_of(" \t"));
-                value.erase(value.find_last_not_of(" \t") + 1);
-
-                if (reg == "mar") regs.MAR = value;
-                else if (reg == "mdr") regs.MDR = value;
-                else if (reg == "pc") regs.PC = value;
-                else if (reg == "mbr") regs.MBR = value;
-                else if (reg == "sp") regs.SP = value;
-                else if (reg == "lv") regs.LV = value;
-                else if (reg == "cpp") regs.CPP = value;
-                else if (reg == "tos") regs.TOS = value;
-                else if (reg == "opc") regs.OPC = value;
-                else if (reg == "h") regs.H = value;
+                // Remove espaços em branco
+                regName.erase(0, regName.find_first_not_of(" \t"));
+                regName.erase(regName.find_last_not_of(" \t") + 1);
+                regValue.erase(0, regValue.find_first_not_of(" \t"));
+                regValue.erase(regValue.find_last_not_of(" \t") + 1);
+                
+                // Define o valor do registrador
+                if (regName == "mar") regs.MAR = std::bitset<32>(regValue).to_ulong();
+                else if (regName == "mdr") regs.MDR = std::bitset<32>(regValue).to_ulong();
+                else if (regName == "pc") regs.PC = std::bitset<32>(regValue).to_ulong();
+                else if (regName == "mbr") regs.MBR = std::bitset<8>(regValue).to_ulong();
+                else if (regName == "sp") regs.SP = std::bitset<32>(regValue).to_ulong();
+                else if (regName == "lv") regs.LV = std::bitset<32>(regValue).to_ulong();
+                else if (regName == "cpp") regs.CPP = std::bitset<32>(regValue).to_ulong();
+                else if (regName == "tos") regs.TOS = std::bitset<32>(regValue).to_ulong();
+                else if (regName == "opc") regs.OPC = std::bitset<32>(regValue).to_ulong();
+                else if (regName == "h") regs.H = std::bitset<32>(regValue).to_ulong();
             }
         }
-
+        
         file.close();
+        
+        logFile << "============================================================" << std::endl;
+        logFile << "Start of Program" << std::endl;
+        logFile << "============================================================" << std::endl;
+        
         return true;
     }
 
-    // Load initial memory values from file
+    // Carrega os valores iniciais da memória a partir de um arquivo
     bool loadMemory(const std::string& filename) {
         std::ifstream file(filename);
         if (!file.is_open()) {
             std::cerr << "Error: Could not open memory file: " << filename << std::endl;
             return false;
         }
-
+        
+        logFile << "============================================================" << std::endl;
+        logFile << "Initial memory state" << std::endl;
+        logFile << "*******************************" << std::endl;
+        
         std::string line;
+        int address = 0;
+        
         while (std::getline(file, line)) {
-            // Remove whitespace
-            line.erase(0, line.find_first_not_of(" \t"));
-            line.erase(line.find_last_not_of(" \t") + 1);
+            // Ignora linhas vazias
+            if (line.empty()) continue;
             
-            if (!line.empty()) {
-                memory.push_back(line);
-            }
+            // Registra o valor da memória no log
+            logFile << line << std::endl;
+            
+            // Converte a string binária para inteiro
+            memory.push_back(std::bitset<32>(line).to_ulong());
+            address++;
         }
-
+        
         file.close();
         return true;
     }
 
-    // Parse and execute instructions from file
+    // Analisa e executa instruções a partir de um arquivo
     bool executeInstructions(const std::string& filename) {
         std::ifstream file(filename);
         if (!file.is_open()) {
@@ -141,7 +182,7 @@ public:
             return false;
         }
 
-        // Open log file
+        // Abre o arquivo de log
         logFile.open("execution_log.txt");
         if (!logFile.is_open()) {
             std::cerr << "Error: Could not create log file" << std::endl;
@@ -150,7 +191,7 @@ public:
 
         std::string line;
         while (std::getline(file, line)) {
-            // Remove whitespace
+            // Remove espaços em branco
             line.erase(0, line.find_first_not_of(" \t"));
             line.erase(line.find_last_not_of(" \t") + 1);
             
@@ -159,13 +200,13 @@ public:
             logFile << "Executing instruction: " << line << std::endl;
             logFile << "----------------------------------------" << std::endl;
 
-            // Parse instruction
+            // Analisa a instrução
             std::string instruction, argument;
             size_t pos = line.find(' ');
             if (pos != std::string::npos) {
                 instruction = line.substr(0, pos);
                 argument = line.substr(pos + 1);
-                // Remove whitespace
+                // Remove espaços em branco
                 argument.erase(0, argument.find_first_not_of(" \t"));
                 argument.erase(argument.find_last_not_of(" \t") + 1);
             } else {
@@ -173,7 +214,7 @@ public:
                 argument = "";
             }
 
-            // Execute the instruction
+            // Executa a instrução
             if (instruction == "ILOAD") {
                 executeILOAD(argument);
             } else if (instruction == "DUP") {
@@ -184,7 +225,7 @@ public:
                 logFile << "Unknown instruction: " << instruction << std::endl;
             }
 
-            // Log memory state after instruction execution
+            // Registra o estado da memória após a execução da instrução
             logMemoryState();
             logFile << "----------------------------------------" << std::endl << std::endl;
         }
@@ -201,94 +242,113 @@ public:
         // Log initial register state
         logRegisterState("Before ILOAD " + argument);
         
-        // Execute microinstructions for ILOAD
+        int cycle = 1;
+        // Executa as microinstruções para ILOAD
         for (const auto& microInst : instructionMap["ILOAD"]) {
-            // Log microinstruction
-            logFile << "Executing microinstruction: " << microInst.description << std::endl;
+            // Registra o ciclo no log
+            logFile << "Cycle " << cycle++ << std::endl;
             
-            // Simulate microinstruction execution
-            // This is a simplified simulation - in a real implementation, you would
-            // decode the binary microinstruction and execute the appropriate operations
+            // Registra a microinstrução no log
+            std::string ir = microInst.binary.substr(0, 8) + " " + 
+                             microInst.binary.substr(8, 9) + " " + 
+                             microInst.binary.substr(17, 2) + " " + 
+                             microInst.binary.substr(19, 4);
+            logFile << "ir = " << ir << std::endl;
             
-            // For ILOAD, we need to:
-            // 1. Set MAR = LV + index
-            // 2. Read from memory (MBR = memory[MAR])
-            // 3. Set TOS = MBR
-            // 4. Increment PC
+            // Convert binary string to char array for ALU
+            char aluInput[8];
+            for (int i = 0; i < 8; i++) {
+                aluInput[i] = microInst.binary[i];
+            }
             
             if (microInst.description.find("MAR = LV + H") != std::string::npos) {
-                // Set H to the index value (converted to binary)
-                regs.H = std::bitset<32>(index).to_string();
+                // Define H com o valor do índice
+                regs.H = index;
                 
-                // Set MAR = LV + H
-                int lvValue = std::bitset<32>(regs.LV).to_ulong();
-                int hValue = std::bitset<32>(regs.H).to_ulong();
-                regs.MAR = std::bitset<32>(lvValue + hValue).to_string();
-                
-                // Log register state after this microinstruction
-                logRegisterState("After MAR = LV + H");
-                logBusState("LV", "MAR");
-            }
-            else if (microInst.description.find("H = MBR; PC = PC + 1") != std::string::npos) {
-                // Read from memory: MBR = memory[MAR]
-                int marValue = std::bitset<32>(regs.MAR).to_ulong();
-                if (marValue < memory.size()) {
-                    regs.MBR = memory[marValue];
+                // Usa a ULA para calcular LV + H
+                auto [output, output_sd, N, Z, carry] = ula8bits(aluInput, regs.LV, regs.H);
+                regs.MAR = output;
+                regs.N = N;
+                regs.Z = Z;
+            
+                // Lê da memória
+                if (regs.MAR < memory.size()) {
+                    regs.MBR = memory[regs.MAR] & 0xFF; // Mantém apenas 8 bits para MBR
                 } else {
-                    regs.MBR = "00000000"; // Default value if memory address is out of bounds
+                    // Valor padrão se o endereço de memória estiver fora dos limites
+                    regs.MBR = 0; 
                 }
                 
-                // Set H = MBR
-                regs.H = std::string(24, '0') + regs.MBR; // Extend 8-bit MBR to 32-bit H
+                // Registra o estado dos registradores após esta microinstrução
+                logRegisterState("After MAR = LV + H; rd");
+                logBusState("LV, H", "MAR");
+            }
+            else if (microInst.description.find("H = MBR; PC = PC + 1") != std::string::npos) {
+                // Define H = MBR (estendido com sinal para 32 bits)
+                regs.H = regs.MBR;
                 
                 // Increment PC
-                int pcValue = std::bitset<32>(regs.PC).to_ulong();
-                regs.PC = std::bitset<32>(pcValue + 1).to_string();
+                auto [output, output_sd, N, Z, carry] = ula8bits(aluInput, regs.PC, 1);
+                regs.PC = output;
+                regs.N = N;
+                regs.Z = Z;
                 
-                // Log register state after this microinstruction
+                // Registra o estado dos registradores após esta microinstrução
                 logRegisterState("After H = MBR; PC = PC + 1");
-                logBusState("MBR", "H, PC");
+                logBusState("MBR, PC", "H, PC");
             }
             else if (microInst.description.find("MDR = TOS") != std::string::npos) {
                 // Set MDR = TOS
                 regs.MDR = regs.TOS;
                 
-                // Log register state after this microinstruction
+                // Extract write signal from the microinstruction (bit 6)
+                bool writeSignal = (microInst.binary.length() > 6 && microInst.binary[microInst.binary.length()-7] == '1');
+                
+                // If write signal is set, write to memory
+                if (writeSignal && regs.MAR < memory.size()) {
+                    memory[regs.MAR] = regs.MDR;
+                }
+                
+                // Registra o estado dos registradores após esta microinstrução
                 logRegisterState("After MDR = TOS");
                 logBusState("TOS", "MDR");
             }
             else if (microInst.description.find("MAR = SP = SP + 1") != std::string::npos) {
-                // Increment SP
-                int spValue = std::bitset<32>(regs.SP).to_ulong();
-                regs.SP = std::bitset<32>(spValue + 1).to_string();
-                
-                // Set MAR = SP
+                // Usa a ULA para incrementar SP
+                auto [output, output_sd, N, Z, carry] = ula8bits(aluInput, regs.SP, 1);
+                regs.SP = output;
                 regs.MAR = regs.SP;
+                regs.N = N;
+                regs.Z = Z;
                 
-                // Write to memory: memory[MAR] = MDR
-                int marValue = std::bitset<32>(regs.MAR).to_ulong();
-                if (marValue >= memory.size()) {
+                // Escreve na memória: memory[MAR] = MDR
+                if (regs.MAR >= memory.size()) {
                     // Expand memory if needed
-                    memory.resize(marValue + 1, "00000000000000000000000000000000");
+                    memory.resize(regs.MAR + 1, 0);
                 }
-                memory[marValue] = regs.MDR;
+                memory[regs.MAR] = regs.MDR;
                 
-                // Log register state after this microinstruction
+                // Registra o estado dos registradores após esta microinstrução
                 logRegisterState("After MAR = SP = SP + 1; wr");
                 logBusState("SP", "MAR, SP");
             }
             else if (microInst.description.find("TOS = MDR") != std::string::npos) {
-                // Set TOS = MDR
-                regs.TOS = regs.MDR;
+                // Usa a ULA para definir TOS = MDR
+                auto [output, output_sd, N, Z, carry] = ula8bits(aluInput, regs.MDR, 0);
+                regs.TOS = output;
+                regs.N = N;
+                regs.Z = Z;
                 
-                // Log register state after this microinstruction
+                // Registra o estado dos registradores após esta microinstrução
                 logRegisterState("After TOS = MDR");
                 logBusState("MDR", "TOS");
             }
         }
         
         // Log final register state
-        logRegisterState("After ILOAD " + argument);
+        logFile << "Cycle " << cycle << std::endl;
+        logFile << "No more lines, EOP." << std::endl;
+        logFile << "=====================================================" << std::endl;
     }
 
     // Execute DUP instruction
@@ -296,166 +356,214 @@ public:
         // Log initial register state
         logRegisterState("Before DUP");
         
+        int cycle = 1;
         // Execute microinstructions for DUP
         for (const auto& microInst : instructionMap["DUP"]) {
-            // Log microinstruction
-            logFile << "Executing microinstruction: " << microInst.description << std::endl;
+            // Registra o ciclo no log
+            logFile << "Cycle " << cycle++ << std::endl;
             
-            // Simulate microinstruction execution
+            // Registra a microinstrução no log
+            std::string ir = microInst.binary.substr(0, 8) + " " + 
+                             microInst.binary.substr(8, 9) + " " + 
+                             microInst.binary.substr(17, 2) + " " + 
+                             microInst.binary.substr(19, 4);
+            logFile << "ir = " << ir << std::endl;
+            
+            // Extract control signals from 23-bit microinstruction
+            std::string microCode = microInst.binary;
+            
             if (microInst.description.find("MDR = TOS") != std::string::npos) {
                 // Set MDR = TOS
                 regs.MDR = regs.TOS;
                 
-                // Log register state after this microinstruction
+                // Extract write signal from the microinstruction (bit 6)
+                bool writeSignal = (microInst.binary.length() > 6 && microInst.binary[microInst.binary.length()-7] == '1');
+                
+                // If write signal is set, write to memory
+                if (writeSignal && regs.MAR < memory.size()) {
+                    memory[regs.MAR] = regs.MDR;
+                }
+                
+                // Registra o estado dos registradores após esta microinstrução
                 logRegisterState("After MDR = TOS");
                 logBusState("TOS", "MDR");
             }
             else if (microInst.description.find("MAR = SP = SP + 1") != std::string::npos) {
                 // Increment SP
-                int spValue = std::bitset<32>(regs.SP).to_ulong();
-                regs.SP = std::bitset<32>(spValue + 1).to_string();
-                
-                // Set MAR = SP
+                regs.SP = regs.SP + 1;
                 regs.MAR = regs.SP;
                 
-                // Write to memory: memory[MAR] = MDR
-                int marValue = std::bitset<32>(regs.MAR).to_ulong();
-                if (marValue >= memory.size()) {
-                    // Expand memory if needed
-                    memory.resize(marValue + 1, "00000000000000000000000000000000");
-                }
-                memory[marValue] = regs.MDR;
+                // Extract write signal from the microinstruction (bit 6)
+                bool writeSignal = (microInst.binary.length() > 6 && microInst.binary[microInst.binary.length()-7] == '1');
                 
-                // Log register state after this microinstruction
+                // If write signal is set, write to memory
+                if (writeSignal) {
+                    if (regs.MAR >= memory.size()) {
+                        // Expand memory if needed
+                        memory.resize(regs.MAR + 1, 0);
+                    }
+                    memory[regs.MAR] = regs.MDR;
+                }
+                
+                // Registra o estado dos registradores após esta microinstrução
                 logRegisterState("After MAR = SP = SP + 1; wr");
                 logBusState("SP", "MAR, SP");
             }
             else if (microInst.description.find("PC = PC + 1") != std::string::npos) {
                 // Increment PC
-                int pcValue = std::bitset<32>(regs.PC).to_ulong();
-                regs.PC = std::bitset<32>(pcValue + 1).to_string();
+                regs.PC = regs.PC + 1;
                 
-                // Log register state after this microinstruction
+                // Registra o estado dos registradores após esta microinstrução
                 logRegisterState("After PC = PC + 1");
                 logBusState("PC", "PC");
             }
         }
         
         // Log final register state
-        logRegisterState("After DUP");
+        logFile << "Cycle " << cycle << std::endl;
+        logFile << "=====================================================" << std::endl;
     }
 
     // Execute BIPUSH instruction
     void executeBIPUSH(const std::string& byteValue) {
+        // Convert byteValue string to integer
+        int byteInt = std::stoi(byteValue);
+        
         // Log initial register state
         logRegisterState("Before BIPUSH " + byteValue);
         
+        int cycle = 1;
         // Execute microinstructions for BIPUSH
         for (const auto& microInst : instructionMap["BIPUSH"]) {
-            // Log microinstruction
-            logFile << "Executing microinstruction: " << microInst.description << std::endl;
+            // Registra o ciclo no log
+            logFile << "Cycle " << cycle++ << std::endl;
             
-            // For BIPUSH, the second microinstruction needs special handling
-            // The first 8 bits should be set to the byte value from the instruction
-            std::string modifiedMicroInst = microInst.binary;
+            // Registra a microinstrução no log
+            std::string ir = microInst.binary.substr(0, 8) + " " + 
+                             microInst.binary.substr(8, 9) + " " + 
+                             microInst.binary.substr(17, 2) + " " + 
+                             microInst.binary.substr(19, 4);
+            logFile << "ir = " << ir << std::endl;
             
-            if (microInst.description.find("MBR = byte") != std::string::npos) {
-                // Set MBR to the byte value from the instruction
-                regs.MBR = byteValue;
-                
-                // Log register state after this microinstruction
-                logRegisterState("After MBR = byte; MDR = TOS");
-                logBusState("", "MBR, MDR");
-                
-                // Also set MDR = TOS
-                regs.MDR = regs.TOS;
-            }
-            else if (microInst.description.find("PC = PC + 1") != std::string::npos) {
+            // Extract control signals from 23-bit microinstruction
+            std::string microCode = microInst.binary;
+            
+            if (microInst.description.find("PC = PC + 1") != std::string::npos) {
                 // Increment PC
-                int pcValue = std::bitset<32>(regs.PC).to_ulong();
-                regs.PC = std::bitset<32>(pcValue + 1).to_string();
+                regs.PC = regs.PC + 1;
                 
-                // Log register state after this microinstruction
+                // Registra o estado dos registradores após esta microinstrução
                 logRegisterState("After PC = PC + 1");
                 logBusState("PC", "PC");
             }
+            else if (microInst.description.find("MBR = byte") != std::string::npos) {
+                // Set MBR to the byte value from the instruction
+                regs.MBR = byteInt & 0xFF; // Ensure it's only 8 bits
+                
+                // Set H = MBR (zero-extended to 32 bits)
+                regs.H = static_cast<uint32_t>(regs.MBR & 0xFF); // Zero-extension
+                
+                // Registra o estado dos registradores após esta microinstrução
+                logRegisterState("After MBR = byte; H = MBR");
+                logBusState("byte", "MBR, H");
+            }
             else if (microInst.description.find("MAR = SP = SP + 1") != std::string::npos) {
                 // Increment SP
-                int spValue = std::bitset<32>(regs.SP).to_ulong();
-                regs.SP = std::bitset<32>(spValue + 1).to_string();
-                
-                // Set MAR = SP
+                regs.SP = regs.SP + 1;
                 regs.MAR = regs.SP;
                 
-                // Write to memory: memory[MAR] = MDR
-                int marValue = std::bitset<32>(regs.MAR).to_ulong();
-                if (marValue >= memory.size()) {
-                    // Expand memory if needed
-                    memory.resize(marValue + 1, "00000000000000000000000000000000");
-                }
-                memory[marValue] = regs.MDR;
+                // Extract write signal from the microinstruction (bit 6)
+                bool writeSignal = (microInst.binary.length() > 6 && microInst.binary[microInst.binary.length()-7] == '1');
                 
-                // Log register state after this microinstruction
+                // If write signal is set, write to memory
+                if (writeSignal) {
+                    if (regs.MAR >= memory.size()) {
+                        // Expand memory if needed
+                        memory.resize(regs.MAR + 1, 0);
+                    }
+                    memory[regs.MAR] = regs.MDR;
+                }
+                
+                // Registra o estado dos registradores após esta microinstrução
                 logRegisterState("After MAR = SP = SP + 1; wr");
                 logBusState("SP", "MAR, SP");
             }
             else if (microInst.description.find("TOS = MBR") != std::string::npos) {
-                // Set TOS = MBR (extended to 32 bits)
-                regs.TOS = std::string(24, '0') + regs.MBR;
+                // Convert binary string to char array for ALU
+                char aluInput[8];
+                for (int i = 0; i < 8; i++) {
+                    aluInput[i] = microInst.binary[i];
+                }
+                
+                // Use ALU to set TOS = MBR (sign extended to 32 bits)
+                auto [output, output_sd, N, Z, carry] = ula8bits(aluInput, regs.MBR, 0);
+                regs.TOS = output;
+                regs.N = N;
+                regs.Z = Z;
                 
                 // Increment PC
-                int pcValue = std::bitset<32>(regs.PC).to_ulong();
-                regs.PC = std::bitset<32>(pcValue + 1).to_string();
+                auto [pc_output, pc_output_sd, pc_N, pc_Z, pc_carry] = ula8bits(aluInput, regs.PC, 1);
+                regs.PC = pc_output;
                 
-                // Log register state after this microinstruction
+                // Registra o estado dos registradores após esta microinstrução
                 logRegisterState("After TOS = MBR; PC = PC + 1");
-                logBusState("MBR", "TOS, PC");
+                logBusState("MBR, PC", "TOS, PC");
             }
         }
         
         // Log final register state
-        logRegisterState("After BIPUSH " + byteValue);
+        logFile << "Cycle " << cycle << std::endl;
+        logFile << "No more lines, EOP." << std::endl;
+        logFile << "=====================================================" << std::endl;
     }
 
-    // Log register state
+    // Registra o estado dos registradores
     void logRegisterState(const std::string& label) {
-        logFile << label << ":" << std::endl;
-        logFile << "  H   = " << regs.H << std::endl;
-        logFile << "  OPC = " << regs.OPC << std::endl;
-        logFile << "  TOS = " << regs.TOS << std::endl;
-        logFile << "  CPP = " << regs.CPP << std::endl;
-        logFile << "  LV  = " << regs.LV << std::endl;
-        logFile << "  SP  = " << regs.SP << std::endl;
-        logFile << "  MBR = " << regs.MBR << std::endl;
-        logFile << "  PC  = " << regs.PC << std::endl;
-        logFile << "  MDR = " << regs.MDR << std::endl;
-        logFile << "  MAR = " << regs.MAR << std::endl;
-        logFile << std::endl;
-    }
-
-    // Log bus state
-    void logBusState(const std::string& busB, const std::string& busC) {
-        logFile << "  Bus B = " << busB << std::endl;
-        logFile << "  Bus C = " << busC << std::endl;
-        logFile << std::endl;
-    }
-
-    // Log memory state
-    void logMemoryState() {
-        logFile << "Memory state:" << std::endl;
-        for (size_t i = 0; i < memory.size(); ++i) {
-            logFile << "  Memory[" << i << "] = " << memory[i] << std::endl;
+        if (label.find("Before") != std::string::npos) {
+            logFile << "> Registers before instruction" << std::endl;
+        } else if (label.find("After") != std::string::npos) {
+            logFile << "> Registers after instruction" << std::endl;
+        } else {
+            logFile << label << std::endl;
         }
+        logFile << "*******************************" << std::endl;
+        logFile << "mar = " << std::bitset<32>(regs.MAR) << std::endl;
+        logFile << "mdr = " << std::bitset<32>(regs.MDR) << std::endl;
+        logFile << "pc = " << std::bitset<32>(regs.PC) << std::endl;
+        logFile << "mbr = " << std::bitset<8>(regs.MBR) << std::endl;
+        logFile << "sp = " << std::bitset<32>(regs.SP) << std::endl;
+        logFile << "lv = " << std::bitset<32>(regs.LV) << std::endl;
+        logFile << "cpp = " << std::bitset<32>(regs.CPP) << std::endl;
+        logFile << "tos = " << std::bitset<32>(regs.TOS) << std::endl;
+        logFile << "opc = " << std::bitset<32>(regs.OPC) << std::endl;
+        logFile << "h = " << std::bitset<32>(regs.H) << std::endl;
         logFile << std::endl;
+    }
+
+    // Registra o estado dos barramentos
+    void logBusState(const std::string& busB, const std::string& busC) {
+        logFile << "b = " << busB << std::endl;
+        logFile << "c = " << busC << std::endl;
+        logFile << std::endl;
+    }
+
+    // Registra o estado da memória
+    void logMemoryState() {
+        logFile << "> Memory after instruction" << std::endl;
+        logFile << "*******************************" << std::endl;
+        for (size_t i = 0; i < memory.size() && i < 16; ++i) {
+            logFile << std::bitset<32>(memory[i]) << std::endl;
+        }
+        logFile << "============================================================" << std::endl;
     }
 };
 
 int main(int argc, char* argv[]) {
-    std::string registerFile = "/Users/fnayres/Gigachad-ALU/entregavel/registradores_etapa3_tarefa1";
-    std::string memoryFile = "/Users/fnayres/Gigachad-ALU/entregavel/dados_etapa3_tarefa1.txt";
-    std::string instructionFile = "/Users/fnayres/Gigachad-ALU/entregavel/instrucoes.txt";
+    std::string registerFile = "registradores_etapa3_tarefa1";
+    std::string memoryFile = "dados_etapa3_tarefa1.txt";
+    std::string instructionFile = "instrucoes.txt";
     
-    // Parse command line arguments
+    // Analisa os argumentos da linha de comando
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         if (arg == "-r" && i + 1 < argc) {
@@ -469,19 +577,19 @@ int main(int argc, char* argv[]) {
     
     Mic1Interpreter interpreter;
     
-    // Load initial register values
+    // Carrega os valores iniciais dos registradores
     if (!interpreter.loadRegisters(registerFile)) {
         std::cerr << "Failed to load registers from " << registerFile << std::endl;
         return 1;
     }
     
-    // Load initial memory values
+    // Carrega os valores iniciais da memória
     if (!interpreter.loadMemory(memoryFile)) {
         std::cerr << "Failed to load memory from " << memoryFile << std::endl;
         return 1;
     }
     
-    // Execute instructions
+    // Executa as instruções
     if (!interpreter.executeInstructions(instructionFile)) {
         std::cerr << "Failed to execute instructions from " << instructionFile << std::endl;
         return 1;

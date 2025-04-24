@@ -1,4 +1,4 @@
-#include <bits/stdc++.h>
+#include "ula.h"
 using namespace std;
 
 int op(int *&b,int &h,int &mdr,int &pc,string &comando)

@@ -1,4 +1,3 @@
-#include <bits/stdc++.h>
 #include "mem.h"
 #include "ula.h"
 using namespace std;

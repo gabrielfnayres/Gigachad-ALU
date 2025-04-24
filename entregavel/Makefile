@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Wextra
+CXXFLAGS = -std=c++17 -Wall -Wextra
 
 # Target executable
 TARGET = mic1_interpreter
@@ -28,6 +28,14 @@ clean:
 # Run the program
 run: $(TARGET)
 	./$(TARGET)
+
+# Run with specific input files
+run_custom: $(TARGET)
+	./$(TARGET) -r $(REG_FILE) -m $(MEM_FILE) -i $(INST_FILE)
+
+# View the log file
+view_log: run
+	cat execution_log.txt
 
 # Run with specific input files
 run_with_files: $(TARGET)
