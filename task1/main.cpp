@@ -2,134 +2,70 @@
 #include <iostream>
 #include <fstream>
 #include <string>
-#include <bitset>
 #include <map>
-
+using namespace std;
 int main(int argc, char* argv[]) {
-    // Check if input file is provided
-    if (argc < 2) {
-        std::cout << "Usage: " << argv[0] << " <input_file> [output_file]" << std::endl;
-        return 1;
+        // Leitura de arquivos:
+    // Abrir os arquivos
+    ifstream entrada("programa_etapa1.txt");
+    ofstream saida("saída.txt");
+
+    if (!entrada.is_open() || !saida.is_open())
+    {
+        cerr << "Erro ao abrir arquivos de entrada ou saída.\n";
+        return 0;
     }
 
-    // Get input and output file names
-    std::string input_filename = argv[1];
-    std::string output_filename = (argc > 2) ? argv[2] : "output.txt";
+    // Início do programa
+    saida << "b = " << bitset<32>(1) << "\n";
+    // Aqui usamos -1 para representar 0xFFFFFFFF (todos 1)
+    saida << "a = " << bitset<32>(static_cast<unsigned int>(-1)) << "\n\n";
+    saida << "Start of Program\n";
+    saida << "============================================================\n";
 
-    // Open input file
-    std::ifstream input_file(input_filename);
-    if (!input_file.is_open()) {
-        std::cerr << "Error: Could not open input file " << input_filename << std::endl;
-        return 1;
-    }
+    string linha;
+    int PC = 0;
 
-    // Open output file
-    std::ofstream output_file(output_filename);
-    if (!output_file.is_open()) {
-        std::cerr << "Error: Could not open output file " << output_filename << std::endl;
-        return 1;
-    }
+    /*     Instrução:  Esta palavra deve ser armazenada em uma variável que representa o registrador de
+    instrução (IR), e uma outra variável deve atuar como o contador de programa (PC),
+    definindo que linha do programa está sendo executada. */
+    while (getline(entrada, linha))
+    {
 
-    // Initialize ALU
-    Alu* alu = new Alu();
-    
-    // Set initial values for A and B (32-bit binary strings)
-    std::string a_value = "11111111111111111111111111111111"; // Initial value for A
-    std::string b_value = "00000000000000000000000000000001"; // Initial value for B
-    
-    alu->setA(a_value);
-    alu->setB(b_value);
-    
+        if (linha.empty())
+        {
+            saida << "Cycle " << (PC + 1) << "\n\n";
+            saida << "PC = " << (PC + 1) << "\n";
+            saida << "> Line is empty, EOP.\n";
+            break;
+        }
 
-    // Write initial values to output file
-    output_file << "b = " << b_value << std::endl;
-    output_file << "a = " << a_value << std::endl;
-    output_file << std::endl;
-    output_file << "Start of Program" << std::endl;
-
-    // Read and execute instructions
-    std::string instruction;
-    int cycle = 1;
-    
-
-    
-    while (std::getline(input_file, instruction)) {
-        // Skip empty lines
-        
-        
-        if (instruction.empty()) {
+        if (linha.length() != 6)
+        {
+            cerr << "Erro\n";
             continue;
         }
-        
-        // Check if instruction is valid (6 bits)
-        if (instruction.length() != 6) {
-            std::cerr << "Warning: Skipping invalid instruction: " << instruction << std::endl;
-            continue;
-        }
-        
-        // Update IR and PC
-        alu->setIR(instruction);
-        alu->setPC(cycle);
-        
-        // Extract control signals according to the format: F0 F1 ENA ENB INVA INC
-        bool f0 = (instruction[0] == '1');
-        bool f1 = (instruction[1] == '1');
-        bool ena = (instruction[2] == '1');
-        bool enb = (instruction[3] == '1');
-        bool inva = (instruction[4] == '1');
-        bool inc = (instruction[5] == '1');
-        
+        char IR[6];
+        copy(linha.begin(), linha.begin() + 6, IR);
 
-        
-        // Set control signals
-        alu->setF0(f0);
-        alu->setF1(f1);
-        alu->setEna(ena);
-        alu->setEnb(enb);
-        alu->setInva(inva);
-        alu->setInc(inc);
-        
-        // Execute operation
-        alu->execute_operation();
-        
-        // Write to output file
-        output_file << "============================================================" << std::endl;
-        output_file << "Cycle " << cycle << std::endl;
-        output_file << std::endl;
-        output_file << "PC = " << alu->getPC() << std::endl;
-        output_file << "IR = " << alu->getIR() << std::endl;
-        output_file << "b = " << alu->getB() << std::endl;
-        output_file << "a = " << alu->getA() << std::endl;
-        output_file << "s = " << alu->getS() << std::endl;
-        output_file << "co = " << alu->getCarryout() << std::endl;
-        
-        // Increment cycle
-        cycle++;
-        
-        // Update register A based on the ENA signal from the current instruction
-        if (!ena) {
-            alu->setA("00000000000000000000000000000000");
-        } else {
-            alu->setA("11111111111111111111111111111111");
-        }
-        // Keep B value unchanged
-        alu->setB(alu->getB());
+        // Chama a função da ULA
+        pair<unsigned int, unsigned int> resultado_Ula = ula6bits(IR);
+        int A = IR[2] - '0';
+        int B = IR[3] - '0';
+
+        int S = resultado_Ula.first;
+        int vai_um = resultado_Ula.second;
+
+        saida << "Cycle " << (PC + 1) << "\n\n";
+        saida << "PC = " << (PC + 1) << "\n";
+        saida << "IR = " << linha << "\n";
+        saida << "b = " << bitset<32>(B) << "\n";
+        saida << "a = " << bitset<32>(-A) << "\n";
+        saida << "s = " << bitset<32>(S) << "\n";
+        saida << "co = " << vai_um << "\n";
+        saida << "============================================================\n";
+
+        PC++;
     }
-    
-    // End of program
-    output_file << "============================================================" << std::endl;
-    output_file << "Cycle " << cycle << std::endl;
-    output_file << std::endl;
-    output_file << "PC = " << cycle << std::endl;
-    output_file << "> Line is empty, EOP." << std::endl;
-    
-    // Close files
-    input_file.close();
-    output_file.close();
-    
-    delete alu;
-
-    std::cout << "Processing complete. Output written to " << output_filename << std::endl;
-    
     return 0;
 }
